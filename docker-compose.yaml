@@ -1,6 +1,6 @@
 services:
   dkron:
-    image: dkron/dkron
+    image: dkron/dkron:4.0.4
     container_name: dkron
     ports:
       - 8080:8080

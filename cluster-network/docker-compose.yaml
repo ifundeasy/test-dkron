@@ -1,0 +1,184 @@
+volumes:
+  vol_dkron_server_1_1:
+    driver: local
+    name: vol_dkron_server_1_1
+  vol_dkron_server_2_1:
+    driver: local
+    name: vol_dkron_server_2_1
+  vol_dkron_server_3_1:
+    driver: local
+    name: vol_dkron_server_3_1
+  vol_dkron_server_4_1:
+    driver: local
+    name: vol_dkron_server_4_1
+
+networks:
+  # mongo_mitra:
+  #   driver: bridge
+  mitra:
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+services:
+  dkron:
+    container_name: dkron
+    image: &dkronImage dkron/dkron:4.0.4
+    ports:
+      - "8080:8080"
+      - "8946"
+      - "6868"
+    environment:
+      - GODEBUG=netdns=go
+    command: agent --server --log-level=debug --raft-multiplier=1 --data-dir=/dkron.data --bootstrap-expect=5 --node-name=dkron
+    networks:
+      # mongo_mitra:
+      mitra:
+        ipv4_address: 172.21.0.10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://dkron:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  dkron-server-1:
+    container_name: dkron-server-1
+    labels:
+        name: dkron-server-1
+    image: *dkronImage
+    ports:
+      - "8080"
+      - "8946"
+      - "6868"
+    environment:
+      - GODEBUG=netdns=go
+    volumes:
+      - vol_dkron_server_1_1:/dkron.data
+    command: agent --server --retry-join=dkron:8946 --raft-multiplier=1 --data-dir=/dkron.data --log-level=debug --bootstrap-expect=5 --node-name=dkron-server-1
+    networks:
+      # mongo_mitra:
+      mitra:
+        ipv4_address: 172.21.0.8
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://dkron-server-1:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  dkron-server-2:
+    container_name: dkron-server-2
+    labels:
+      name: dkron-server-2
+    image: *dkronImage
+    ports:
+      - "8080"
+      - "8946"
+      - "6868"
+    environment:
+      - GODEBUG=netdns=go
+    volumes:
+      - vol_dkron_server_2_1:/dkron.data
+    command: agent --server --retry-join=dkron:8946 --raft-multiplier=1 --data-dir=/dkron.data --log-level=debug --bootstrap-expect=5 --node-name=dkron-server-2
+    networks:
+      # mongo_mitra:
+      mitra:
+        ipv4_address: 172.21.0.5
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://dkron-server-2:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  dkron-server-3:
+    container_name: dkron-server-3
+    labels:
+      name: dkron-server-3
+    image: *dkronImage
+    ports:
+      - "8080"
+      - "8946"
+      - "6868"
+    environment:
+      - GODEBUG=netdns=go
+    volumes:
+      - vol_dkron_server_3_1:/dkron.data
+    command: agent --server --retry-join=dkron:8946 --raft-multiplier=1 --data-dir=/dkron.data --log-level=debug --bootstrap-expect=5 --node-name=dkron-server-3
+    networks:
+      # mongo_mitra:
+      mitra:
+        ipv4_address: 172.21.0.7
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://dkron-server-3:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  dkron-server-4:
+    container_name: dkron-server-4
+    labels:
+      name: dkron-server-4
+    image: *dkronImage
+    ports:
+      - "8080"
+      - "8946"
+      - "6868"
+    environment:
+      - GODEBUG=netdns=go
+    volumes:
+      - vol_dkron_server_4_1:/dkron.data
+    command: agent --server --retry-join=dkron:8946 --raft-multiplier=1 --data-dir=/dkron.data --log-level=debug --bootstrap-expect=5 --node-name=dkron-server-4
+    networks:
+      # mongo_mitra:
+      mitra:
+        ipv4_address: 172.21.0.9
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://dkron-server-4:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  dkron-agent:
+    image: *dkronImage
+    deploy:
+      replicas: 3
+    labels:
+      name: dkron-agent
+    ports:
+      - "8946"
+      - "6868"
+    environment:
+      - GODEBUG=netdns=go
+      - NODE_NAME=${HOSTNAME}
+    # command: agent --retry-join=dkron:8946 --raft-multiplier=1 --log-level=debug --tag agent=true --node-name=${HOSTNAME}
+    command: agent --retry-join=dkron:8946 --raft-multiplier=1 --log-level=debug --tag agent=true
+    networks:
+      # - mongo_mitra
+      - mitra
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.8.1
+    command: --config /oauth2-proxy.cfg
+    hostname: oauth2-proxy
+    volumes:
+      - "../oauth2-proxy-nginx.cfg:/oauth2-proxy.cfg"
+    restart: unless-stopped
+    ports:
+      - 4180:4180
+    # networks:
+    #   # - mongo_mitra
+    #   - mitra
+
+  nginx:
+    depends_on:
+      - oauth2-proxy
+    container_name: nginx
+    image: nginx:1.27
+    restart: unless-stopped
+    ports:
+      - 80:80
+    hostname: nginx
+    volumes:
+      - "../nginx.conf:/etc/nginx/conf.d/default.conf"
+    # networks:
+    #   # - mongo_mitra
+    #   - mitra
